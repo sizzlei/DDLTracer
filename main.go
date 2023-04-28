@@ -121,7 +121,7 @@ func main() {
 		var wg sync.WaitGroup
 		wg.Add(len(conf.Targets))
 
-		go Notificator(Noti)
+		go CompareFollowUp(Noti)
 
 		for _, t := range conf.Targets {
 			err := CompareDB(&wg,t)
@@ -165,16 +165,25 @@ func CompareDB(wg *sync.WaitGroup,z lib.Target) error {
 			// Compare Table
 			Compares := lib.CompareTable(aRawData,bRawData)
 
+			// Compare Deploy
 			err = z.DeployCompare(s,Compares)
 			if err != nil {
 				return err
 			}
 
 			if len(Compares) > 0 {
+				// Send Notification Channel
 				Noti <- lib.NotiChannel{
 					Schema: s,
 					Compares: Compares,
 				}
+
+				// History Write
+				err = z.WriteHistory(s,Compares)
+				if err != nil {
+					return err
+				}
+				
 			}
 		}
 
@@ -184,7 +193,7 @@ func CompareDB(wg *sync.WaitGroup,z lib.Target) error {
 	return nil
 }
 
-func Notificator(ch <-chan lib.NotiChannel) {
+func CompareFollowUp(ch <-chan lib.NotiChannel) {
 	for i := range ch {
 		fmt.Println(i)
 	}

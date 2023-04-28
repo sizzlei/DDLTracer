@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	_ "modernc.org/sqlite"
 	"fmt"
+	"time"
 )
 
 
@@ -20,6 +21,7 @@ func (t Target) OpenSQLite(p string) (*sql.DB, error) {
 func (t Target) InitSchema(s string) error {
 	DropColumnsQuery := `DROP TABLE IF EXISTS %s_column_definitions;`
 	DropTableQuery := `DROP TABLE IF EXISTS %s_table_definitions;`
+	DropHistoryQuery := `DROP TABLE IF EXISTS %s_definition_history;`
 
 	CreateColumnsQuery := `
 		CREATE TABLE %s_column_definitions (
@@ -38,6 +40,20 @@ func (t Target) InitSchema(s string) error {
 		);
 	`
 
+	CreateHistoryQuery := `
+		CREATE TABLE %s_definition_history (
+			table_name text not null,
+			column_name text null default null,
+			status text not null,
+			def_info text null default null,
+			created_dt text not null
+		);
+	`
+
+	CreateHistoryIndex := `
+			CREATE INDEX idx_%s_tablename_columnname ON %s_definition_history (table_name,column_name)
+	`
+
 	// Drop
 	_, err := t.LiteObj.Exec(fmt.Sprintf(DropColumnsQuery,s))
 	if err != nil {
@@ -49,6 +65,11 @@ func (t Target) InitSchema(s string) error {
 		return err
 	}
 
+	_, err = t.LiteObj.Exec(fmt.Sprintf(DropHistoryQuery,s))
+	if err != nil {
+		return err
+	}
+
 	// Create
 	_, err = t.LiteObj.Exec(fmt.Sprintf(CreateColumnsQuery,s))
 	if err != nil {
@@ -56,6 +77,16 @@ func (t Target) InitSchema(s string) error {
 	}
 
 	_, err = t.LiteObj.Exec(fmt.Sprintf(CreateTableQuery,s))
+	if err != nil {
+		return err
+	}
+
+	_, err = t.LiteObj.Exec(fmt.Sprintf(CreateHistoryQuery,s))
+	if err != nil {
+		return err
+	}
+
+	_, err = t.LiteObj.Exec(fmt.Sprintf(CreateHistoryIndex,s,s))
 	if err != nil {
 		return err
 	}
@@ -158,5 +189,64 @@ func (t Target) GetLiteDefinitions(s string) (map[string]TableRaw, error) {
 	}
 
 	return Raws, nil
+}
+
+func (t Target) WriteHistory(s string,c map[string]TableRaw) error {
+	z := t.LiteObj
+	now := time.Now().Format("2006-01-02 15:04:05")
+
+	histQuery := `
+		INSERT INTO %s_definition_history(table_name,column_name,status,def_info,created_dt)
+		VALUES (?,?,?,?,?);
+	`
+
+	Queries := fmt.Sprintf(histQuery,s)
+	for k, v := range c {
+		switch v.Status {
+		case 1:
+			_, err := z.Exec(Queries,k,nil,"add",v.TableDef,now)
+			if err != nil {
+				return err
+			}
+			for sck, scv := range v.Columns {
+				_, err := z.Exec(Queries,k,sck,"add",scv.Definfo,now)
+				if err != nil {
+					return err
+				}
+			}
+		case 2:
+			_, err := z.Exec(Queries,k,nil,"modify",v.TableDef,now)
+			if err != nil {
+				return err
+			}
+		case 9:
+			_, err := z.Exec(Queries,k,nil,"drop",nil,now)
+			if err != nil {
+				return err
+			}
+		}
+
+		for ck, cv := range v.Columns {
+			switch cv.Status {
+			case 1:
+				_, err := z.Exec(Queries,k,ck,"add",cv.Definfo,now)
+				if err != nil {
+					return err
+				}
+			case 2:
+				_, err := z.Exec(Queries,k,ck,"modify",cv.Definfo,now)
+				if err != nil {
+					return err
+				}
+			case 9:
+				_, err := z.Exec(Queries,k,ck,"drop",nil,now)
+				if err != nil {
+					return err
+				}
+			}
+		}
+
+	}
+	return nil
 }
 
