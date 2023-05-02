@@ -26,8 +26,12 @@ type Target struct {
 	Endpoint		string			`yaml:"Endpoint"`
 	Port			int64			`yaml:"Port"`
 	DB				[]string		`yaml:"DB"`
-	MyObj 			*sql.DB
-	LiteObj			*sql.DB
+	// MyObj 			*sql.DB
+	// LiteObj			*sql.DB
+}
+
+type DBObject struct {
+	Object		*sql.DB
 }
 
 

@@ -7,9 +7,8 @@ import (
 	"time"
 )
 
-
-func (t Target) OpenSQLite(p string) (*sql.DB, error) {
-	sqlObj, err := sql.Open("sqlite",fmt.Sprintf("%s/%s_%s.db",p, t.Alias,t.Endpoint))
+func OpenSQLite(p string,a string, s string) (*sql.DB, error) {
+	sqlObj, err := sql.Open("sqlite",fmt.Sprintf("%s/%s_%s.db",p, s, a))
 	if err != nil {
 		return nil, err
 	}
@@ -18,30 +17,34 @@ func (t Target) OpenSQLite(p string) (*sql.DB, error) {
 	return sqlObj,nil
 }
 
-func (t Target) InitSchema(s string) error {
-	DropColumnsQuery := `DROP TABLE IF EXISTS %s_column_definitions;`
-	DropTableQuery := `DROP TABLE IF EXISTS %s_table_definitions;`
-	DropHistoryQuery := `DROP TABLE IF EXISTS %s_definition_history;`
+func (o DBObject) InitSchema(s string) error {
+	DropColumnsQuery := `DROP TABLE IF EXISTS column_definitions;`
+	DropTableQuery := `DROP TABLE IF EXISTS table_definitions;`
+	DropHistoryQuery := `DROP TABLE IF EXISTS definition_history;`
 
 	CreateColumnsQuery := `
-		CREATE TABLE %s_column_definitions (
+		CREATE TABLE column_definitions (
 			table_name text not null,
 			column_name text not null,
 			def_info text not null,
+			column_type text not null,
+			nullallowed text not null,
+			comment text not null,
 			PRIMARY KEY (table_name,column_name)
 		);
 	`
 
 	CreateTableQuery := `
-		CREATE TABLE %s_table_definitions (
+		CREATE TABLE table_definitions (
 			table_name text not null,
 			def_info text not null,
+			comment text not null,
 			PRIMARY KEY (table_name)
 		);
 	`
 
 	CreateHistoryQuery := `
-		CREATE TABLE %s_definition_history (
+		CREATE TABLE definition_history (
 			table_name text not null,
 			column_name text null default null,
 			status text not null,
@@ -51,42 +54,42 @@ func (t Target) InitSchema(s string) error {
 	`
 
 	CreateHistoryIndex := `
-			CREATE INDEX idx_%s_tablename_columnname ON %s_definition_history (table_name,column_name)
+			CREATE INDEX idx_tablename_columnname ON definition_history (table_name,column_name)
 	`
 
 	// Drop
-	_, err := t.LiteObj.Exec(fmt.Sprintf(DropColumnsQuery,s))
+	_, err := o.Object.Exec(DropColumnsQuery)
 	if err != nil {
 		return err
 	}
 
-	_, err = t.LiteObj.Exec(fmt.Sprintf(DropTableQuery,s))
+	_, err = o.Object.Exec(DropTableQuery)
 	if err != nil {
 		return err
 	}
 
-	_, err = t.LiteObj.Exec(fmt.Sprintf(DropHistoryQuery,s))
+	_, err = o.Object.Exec(DropHistoryQuery)
 	if err != nil {
 		return err
 	}
 
 	// Create
-	_, err = t.LiteObj.Exec(fmt.Sprintf(CreateColumnsQuery,s))
+	_, err = o.Object.Exec(CreateColumnsQuery)
 	if err != nil {
 		return err
 	}
 
-	_, err = t.LiteObj.Exec(fmt.Sprintf(CreateTableQuery,s))
+	_, err = o.Object.Exec(CreateTableQuery)
 	if err != nil {
 		return err
 	}
 
-	_, err = t.LiteObj.Exec(fmt.Sprintf(CreateHistoryQuery,s))
+	_, err = o.Object.Exec(CreateHistoryQuery)
 	if err != nil {
 		return err
 	}
 
-	_, err = t.LiteObj.Exec(fmt.Sprintf(CreateHistoryIndex,s,s))
+	_, err = o.Object.Exec(CreateHistoryIndex)
 	if err != nil {
 		return err
 	}
@@ -94,26 +97,26 @@ func (t Target) InitSchema(s string) error {
 	return nil
 }
 
-func (t Target) WriteDefinitions(s string, r map[string]TableRaw) error {
+func (o DBObject) WriteDefinitions(r map[string]TableRaw) error {
 	addTableQuery := `
-		INSERT INTO %s_table_definitions(table_name,def_info)
-		VALUES(?,?)
+		INSERT INTO table_definitions(table_name,def_info,comment)
+		VALUES(?,?,?)
 	`
 
 	addColumnQuery := `
-		INSERT INTO %s_column_definitions(table_name,column_name,def_info)
-		VALUES (?,?,?)
+		INSERT INTO column_definitions(table_name,column_name,def_info,column_type,nullallowed,comment)
+		VALUES (?,?,?,?,?,?)
 	`
 
 	for k, v := range r {
 		// Table
-		_, err := t.LiteObj.Exec(fmt.Sprintf(addTableQuery,s),k, v.TableDef)
+		_, err := o.Object.Exec(addTableQuery,k, v.TableDef,v.Comment)
 		if err != nil {
 			return err
 		}
 
 		for c, d := range v.Columns {
-			_, err := t.LiteObj.Exec(fmt.Sprintf(addColumnQuery,s),k,c,d.Definfo)
+			_, err := o.Object.Exec(addColumnQuery,k,c,d.Definfo,d.ColumnType,d.NullAllowed,d.Comment)
 			if err != nil {
 				return err
 			}
@@ -123,42 +126,47 @@ func (t Target) WriteDefinitions(s string, r map[string]TableRaw) error {
 	return nil
 }
 
-func (t Target) GetLiteDefinitions(s string) (map[string]TableRaw, error) {
+func (o DBObject) GetLiteDefinitions() (map[string]TableRaw, error) {
 	getTableQuery := `
 		SELECT 
 			table_name,
-			def_info
-		FROM %s_table_definitions
+			def_info,
+			comment
+		FROM table_definitions
 	`
 
 	getColumnQuery := `
 		select 
 			column_name,
-			def_info
-		from %s_column_definitions
+			def_info,
+			column_type,
+			nullallowed,
+			comment
+		from column_definitions
 		where table_name = ?
 	`
 	
 	var Raws map[string]TableRaw
 	Raws = make(map[string]TableRaw)
 
-	data, err := t.LiteObj.Query(fmt.Sprintf(getTableQuery,s))
+	data, err := o.Object.Query(getTableQuery)
 	if err != nil {
 		return Raws, err
 	}
 	defer data.Close()
 
 	for data.Next() {
-		var table,definfo string
+		var table,definfo,tableComment string
 		err := data.Scan(
 			&table,
 			&definfo,
+			&tableComment,
 		)
 		if err != nil {
 			return Raws, err
 		}
 
-		columnsData, err := t.LiteObj.Query(fmt.Sprintf(getColumnQuery,s),table)
+		columnsData, err := o.Object.Query(getColumnQuery,table)
 		if err != nil {
 			return Raws, err
 		}
@@ -168,10 +176,13 @@ func (t Target) GetLiteDefinitions(s string) (map[string]TableRaw, error) {
 		columnRaws = make(map[string]ColumnRawData)
 
 		for columnsData.Next() {
-			var columnName,defInfo string
+			var columnName,defInfo,columnType,nullallowed,columnComment string
 			err := columnsData.Scan(
 				&columnName,
 				&defInfo,
+				&columnType,
+				&nullallowed,
+				&columnComment,
 			)
 			if err != nil {
 				return Raws, err
@@ -179,48 +190,50 @@ func (t Target) GetLiteDefinitions(s string) (map[string]TableRaw, error) {
 
 			columnRaws[columnName] = ColumnRawData{
 				Definfo: defInfo,
+				ColumnType: columnType,
+				NullAllowed: nullallowed,
+				Comment: columnComment,
 			}
 		}
 
 		Raws[table] = TableRaw{
 			TableDef: definfo,
 			Columns: columnRaws,
+			Comment: tableComment,
 		}
 	}
 
 	return Raws, nil
 }
 
-func (t Target) WriteHistory(s string,c map[string]TableRaw) error {
-	z := t.LiteObj
+func (o DBObject) WriteHistory(c map[string]TableRaw) error {
 	now := time.Now().Format("2006-01-02 15:04:05")
 
-	histQuery := `
-		INSERT INTO %s_definition_history(table_name,column_name,status,def_info,created_dt)
+	Queries := `
+		INSERT INTO definition_history(table_name,column_name,status,def_info,created_dt)
 		VALUES (?,?,?,?,?);
 	`
 
-	Queries := fmt.Sprintf(histQuery,s)
 	for k, v := range c {
 		switch v.Status {
 		case 1:
-			_, err := z.Exec(Queries,k,nil,"add",v.TableDef,now)
+			_, err := o.Object.Exec(Queries,k,nil,"add",v.TableDef,now)
 			if err != nil {
 				return err
 			}
 			for sck, scv := range v.Columns {
-				_, err := z.Exec(Queries,k,sck,"add",scv.Definfo,now)
+				_, err := o.Object.Exec(Queries,k,sck,"add",scv.Definfo,now)
 				if err != nil {
 					return err
 				}
 			}
 		case 2:
-			_, err := z.Exec(Queries,k,nil,"modify",v.TableDef,now)
+			_, err := o.Object.Exec(Queries,k,nil,"modify",v.TableDef,now)
 			if err != nil {
 				return err
 			}
 		case 9:
-			_, err := z.Exec(Queries,k,nil,"drop",nil,now)
+			_, err := o.Object.Exec(Queries,k,nil,"drop",nil,now)
 			if err != nil {
 				return err
 			}
@@ -229,17 +242,17 @@ func (t Target) WriteHistory(s string,c map[string]TableRaw) error {
 		for ck, cv := range v.Columns {
 			switch cv.Status {
 			case 1:
-				_, err := z.Exec(Queries,k,ck,"add",cv.Definfo,now)
+				_, err := o.Object.Exec(Queries,k,ck,"add",cv.Definfo,now)
 				if err != nil {
 					return err
 				}
 			case 2:
-				_, err := z.Exec(Queries,k,ck,"modify",cv.Definfo,now)
+				_, err := o.Object.Exec(Queries,k,ck,"modify",cv.Definfo,now)
 				if err != nil {
 					return err
 				}
 			case 9:
-				_, err := z.Exec(Queries,k,ck,"drop",nil,now)
+				_, err := o.Object.Exec(Queries,k,ck,"drop",nil,now)
 				if err != nil {
 					return err
 				}

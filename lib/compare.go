@@ -1,9 +1,5 @@
 package lib 
 
-import (
-	"fmt"
-)
-
 
 func CompareTable(a map[string]TableRaw, b map[string]TableRaw) map[string]TableRaw {
 	//a - DB , b - sqlite 
@@ -16,6 +12,7 @@ func CompareTable(a map[string]TableRaw, b map[string]TableRaw) map[string]Table
 			Compares[k] = TableRaw{
 				TableDef: v.TableDef,
 				Columns: v.Columns,
+				Comment: v.Comment,
 				Status: 1,
 			}
 		} else {
@@ -27,12 +24,18 @@ func CompareTable(a map[string]TableRaw, b map[string]TableRaw) map[string]Table
 					// Add Column
 					columnRaws[kca] = ColumnRawData{
 						Definfo: ca.Definfo,
+						ColumnType: ca.ColumnType,
+						NullAllowed: ca.NullAllowed,
+						Comment: ca.Comment,
 						Status: 1,
 					}
 				} else if b[k].Columns[kca].Definfo != ca.Definfo {
 					// Modify Column
 					columnRaws[kca] = ColumnRawData{
 						Definfo: ca.Definfo,
+						ColumnType: ca.ColumnType,
+						NullAllowed: ca.NullAllowed,
+						Comment: ca.Comment,
 						Status: 2,
 					}
 				}
@@ -43,6 +46,7 @@ func CompareTable(a map[string]TableRaw, b map[string]TableRaw) map[string]Table
 				Compares[k] = TableRaw{
 					TableDef: v.TableDef,
 					Columns: columnRaws,
+					Comment: v.Comment,
 					Status: 2,
 				}
 			} else {
@@ -74,11 +78,14 @@ func CompareTable(a map[string]TableRaw, b map[string]TableRaw) map[string]Table
 				columnRaws = Compares[k].Columns
 			}
 
-			for kcb,_ := range v.Columns {
+			for kcb,kcv := range v.Columns {
 				if a[k].Columns[kcb].Definfo == "" {
 					// Drop Column
 					columnRaws[kcb] = ColumnRawData{
 						Definfo: "",
+						ColumnType: kcv.ColumnType,
+						NullAllowed: kcv.NullAllowed,
+						Comment: kcv.Comment,
 						Status: 9,
 					}
 				}
@@ -100,38 +107,42 @@ func CompareTable(a map[string]TableRaw, b map[string]TableRaw) map[string]Table
 	return Compares
 }
 
-func (t Target) DeployCompare(s string, c map[string]TableRaw) error {
+func (o DBObject) DeployCompare(c map[string]TableRaw) error {
 	addTableQuery := `
-		INSERT INTO %s_table_definitions(table_name,def_info)
-		values (?,?)
+		INSERT INTO table_definitions(table_name,def_info,comment)
+		values (?,?,?)
 	`
 
 	addColumnQuery := `
-		INSERT INTO %s_column_definitions(table_name,column_name,def_info)
-		values (?,?,?)
+		INSERT INTO column_definitions(table_name,column_name,def_info,column_type,nullallowed,comment)
+		values (?,?,?,?,?,?)
 	`
 
 
 	droTableQuery := `
-		DELETE FROM %s_table_definitions WHERE table_name = ?
+		DELETE FROM table_definitions WHERE table_name = ?
 	`
 
 	dropTableColumnQuery := `
-		DELETE FROM %s_column_definitions WHERE table_name = ?
+		DELETE FROM column_definitions WHERE table_name = ?
 	`
 	dropColumnQuery := `
-		DELETE FROM %s_column_definitions WHERE table_name = ? and column_name = ?
+		DELETE FROM column_definitions WHERE table_name = ? and column_name = ?
 	`
 
 	modifyTableQuery := `
-		UPDATE %s_table_definitions 
-		SET def_info = ?
+		UPDATE table_definitions 
+		SET def_info = ?,
+			comment = ?
 		WHERE table_name = ?
 	`
 
 	modifyColumnQuery := `
-		UPDATE %s_column_definitions 
-		SET def_info = ?
+		UPDATE column_definitions 
+		SET def_info = ?,
+			column_type = ?,
+			nullallowed = ?,
+			comment = ?
 		WHERE table_name = ? and column_name = ?
 	`
 
@@ -141,30 +152,30 @@ func (t Target) DeployCompare(s string, c map[string]TableRaw) error {
 		switch v.Status {
 		case 1:
 			// ADD
-			_, err = t.LiteObj.Exec(fmt.Sprintf(addTableQuery,s),k,v.TableDef)
+			_, err = o.Object.Exec(addTableQuery,k,v.TableDef,v.Comment)
 			if err != nil {
 				return err
 			}
 			for vck, vc := range v.Columns {
-				_, err = t.LiteObj.Exec(fmt.Sprintf(addColumnQuery,s),k,vck,vc.Definfo)
+				_, err = o.Object.Exec(addColumnQuery,k,vck,vc.Definfo,vc.ColumnType,vc.NullAllowed,vc.Comment)
 				if err != nil {
 					return err
 				}
 			}
 		case 2:
 			// Modify
-			_, err = t.LiteObj.Exec(fmt.Sprintf(modifyTableQuery,s),v.TableDef,k)
+			_, err = o.Object.Exec(modifyTableQuery,v.TableDef,v.Comment,k)
 			if err != nil {
 				return err
 			}
 		case 9:
 			// Drop
-			_, err = t.LiteObj.Exec(fmt.Sprintf(droTableQuery,s),k)
+			_, err = o.Object.Exec(droTableQuery,k)
 			if err != nil {
 				return err
 			}
 
-			_, err = t.LiteObj.Exec(fmt.Sprintf(dropTableColumnQuery,s),k)
+			_, err = o.Object.Exec(dropTableColumnQuery,k)
 			if err != nil {
 				return err
 			}
@@ -173,19 +184,19 @@ func (t Target) DeployCompare(s string, c map[string]TableRaw) error {
 			switch cv.Status {
 			case 1:
 				// ADD
-				_, err = t.LiteObj.Exec(fmt.Sprintf(addColumnQuery,s),k,ck,cv.Definfo)
+				_, err = o.Object.Exec(addColumnQuery,k,ck,cv.Definfo,cv.ColumnType,cv.NullAllowed,cv.Comment)
 				if err != nil {
 					return err
 				}
 			case 2:
 				// Modify
-				_, err = t.LiteObj.Exec(fmt.Sprintf(modifyColumnQuery,s),cv.Definfo,k,ck)
+				_, err = o.Object.Exec(modifyColumnQuery,cv.Definfo,cv.ColumnType,cv.NullAllowed,cv.Comment,k,ck)
 				if err != nil {
 					return err
 				}
 			case 9:
 				// Drop
-				_, err = t.LiteObj.Exec(fmt.Sprintf(dropColumnQuery,s),k,ck)
+				_, err = o.Object.Exec(dropColumnQuery,k,ck)
 				if err != nil {
 					return err
 				}

@@ -9,18 +9,22 @@ import (
 type TableRaw struct{
 	TableDef 	string
 	Columns 	map[string]ColumnRawData
+	Comment 	string
 	Status		int64 // Status - 1:Add / 2:Modify / 9:Drop
 }
 
 type ColumnRawData struct {
 	Definfo		string
+	ColumnType 	string 
+	NullAllowed	string 
+	Comment 	string
 	Status		int64 // Status - 1:Add / 2:Modify / 9:Drop
 }
 
-func (g GlobalConfigure) CreateDBObject(t Target) (*sql.DB,error) {
+func CreateDBObject(t Target, u string, p string) (*sql.DB,error) {
 	DSN := "%s:%s@tcp(%s:%d)/information_schema"
 	// Create DB Object
-	dbObj, err := sql.Open("mysql",fmt.Sprintf(DSN,g.User,g.Pass,t.Endpoint,t.Port))
+	dbObj, err := sql.Open("mysql",fmt.Sprintf(DSN,u,p,t.Endpoint,t.Port))
 	if err != nil {
 		return nil,err
 	}
@@ -34,7 +38,7 @@ func (g GlobalConfigure) CreateDBObject(t Target) (*sql.DB,error) {
 	return dbObj,nil
 } 
 
-func (t Target) GetDefinitions(s string) (map[string]TableRaw, error) {
+func (o DBObject) GetDefinitions(s string) (map[string]TableRaw, error) {
 	getTableQuery := `
 		SELECT 
 			table_name,
@@ -42,7 +46,8 @@ func (t Target) GetDefinitions(s string) (map[string]TableRaw, error) {
 			IFNULL(TABLE_TYPE,"NULL"),
 			IFNULL(ROW_FORMAT,"NULL"),
 			IFNULL(TABLE_COLLATION,"NULL"),
-			TABLE_COMMENT)
+			TABLE_COMMENT),
+			TABLE_COMMENT
 		FROM information_schema.tables where table_schema = ?
 	`
 
@@ -58,7 +63,10 @@ func (t Target) GetDefinitions(s string) (map[string]TableRaw, error) {
 				IF(extra="","NULL",extra),
 				IF(generation_expression="","NULL",extra),
 				IF(column_comment="","NULL",column_comment)
-			)
+			),
+			column_type,
+			is_nullable,
+			IF(column_comment="","NULL",column_comment)
 		from information_schema.columns
 		where table_schema = ?
 			and table_name = ?
@@ -67,23 +75,24 @@ func (t Target) GetDefinitions(s string) (map[string]TableRaw, error) {
 	var Raws map[string]TableRaw
 	Raws = make(map[string]TableRaw)
 
-	data, err := t.MyObj.Query(getTableQuery,s)
+	data, err := o.Object.Query(getTableQuery,s)
 	if err != nil {
 		return Raws, err
 	}
 	defer data.Close()
 
 	for data.Next() {
-		var table,definfo string
+		var table,definfo,tableComment string
 		err := data.Scan(
 			&table,
 			&definfo,
+			&tableComment,
 		)
 		if err != nil {
 			return Raws, err
 		}
 
-		columnsData, err := t.MyObj.Query(getColumnQuery,s,table)
+		columnsData, err := o.Object.Query(getColumnQuery,s,table)
 		if err != nil {
 			return Raws, err
 		}
@@ -93,10 +102,13 @@ func (t Target) GetDefinitions(s string) (map[string]TableRaw, error) {
 		columnRaws = make(map[string]ColumnRawData)
 
 		for columnsData.Next() {
-			var columnName,defInfo string
+			var columnName,defInfo,columnType,nullallowed,columnComment string
 			err := columnsData.Scan(
 				&columnName,
 				&defInfo,
+				&columnType,
+				&nullallowed,
+				&columnComment,
 			)
 			if err != nil {
 				return Raws, err
@@ -104,12 +116,16 @@ func (t Target) GetDefinitions(s string) (map[string]TableRaw, error) {
 
 			columnRaws[columnName] = ColumnRawData{
 				Definfo: defInfo,
+				ColumnType: columnType,
+				NullAllowed: nullallowed,
+				Comment: columnComment,
 			}
 		}
 
 		Raws[table] = TableRaw{
 			TableDef: definfo,
 			Columns: columnRaws,
+			Comment: tableComment,
 		}
 	}
 
