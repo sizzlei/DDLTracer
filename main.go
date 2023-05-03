@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"DDLTracer/lib"
+	"github.com/sizzlei/confloader"
 	"os"
 	"strings"
 	"time"
@@ -12,46 +13,93 @@ import (
 )
 
 const (
-	appName	= "DDLTracer"
-	desc 	= "MySQL DDL Tracer"
-	version	= "v0.1.0"
+	appName	= "DDL Tracer for MySQL by DBA"
 )
 
 var conf lib.DDLTracerConfigure
 var Noti = make(chan lib.NotiChannel)
 
 func main() {
-	var mode,confPath string 
+	// Flag Parsing
+	var mode,confPath,authDiv,paramKey,region string 
 	flag.StringVar(&mode,"mode","","DDLTracer Mode(INIT / START)")
-	flag.StringVar(&confPath,"conf","","DDLTracer Configure")
+	flag.StringVar(&authDiv,"auth","FILE","DDLTracer authentication method(FILE / PARAM), Param is AWS Parameter Store.")
+	flag.StringVar(&confPath,"conf","./conf.yml","DDLTracer Configure")
+	flag.StringVar(&region,"region","ap-northeast-2","DDLTracer authentication Parameter store Region")
+	flag.StringVar(&paramKey,"key","","DDLTracer authentication Parameter store key")
 	flag.Parse()
 
-	log.Infof("%s %s",appName,version)
-	log.Infof("%s",desc)
+	log.Infof("%s",appName)
 
+	// Mode
+	// INIT : Sqlite Schema & Data Reset
+	// START : Schema Scan
 	if mode == "" {
 		log.Errorf("invalid mode(INIT / START)")
 		os.Exit(1)
 	}
 
 	var err error
-	// Configure Load
+	// Configure Load 
+	// Need change Parameter Store 
 	conf, err = lib.ConfigureLoad(confPath)
 	if err != nil {
 		log.Errorf("Failed to Configure Load")
-		log.Errorf("%s",err)
+		log.Errorf("[main.ConfigureLoad] %s",err)
 		os.Exit(1)
+	}
+
+	switch strings.ToUpper(authDiv) {
+	case "FILE":
+		if conf.Global.User == "" || conf.Global.Pass == "" {
+			log.Errorf("Invalid Global User and Global Password Please Check configure file.")	
+			os.Exit(1)
+		}
+	case "PARAM":
+		if paramKey != "" {
+			// AWS Parameter Store
+			var paramData confloader.Param
+			paramData, err = confloader.AWSParamLoader(region, paramKey)
+			if err != nil {
+				log.Errorf("[main.AWSParamLoader] %s",err)
+				os.Exit(1)
+			}
+
+			// Load Auth conf for Param Data
+			paramAuth := paramData.Keyload("DDLTracer")
+
+			// Set Global User & Pass
+			conf.Global.User = paramAuth["User"]
+			conf.Global.Pass = paramAuth["Pass"]
+			log.Infof("Parameter load complete for %s:%s",region,paramKey)
+
+		} else {
+			log.Errorf("Invalid Parameter Store Key. Please Check -h")	
+			os.Exit(1)
+		}
+	default:
+		log.Errorf("Invalid authentication. Please Check -h")
+		os.Exit(1)
+	}
+	
+
+	// Configure Check
+	if conf.Global.CompareIv < 30 && strings.ToUpper(mode) == "START" {
+		log.Warningf("Compare interval is less than 30s.")
+		log.Warningf("Compare interval Set 30s")
+		conf.Global.CompareIv = 30
 	}
 
 	switch strings.ToUpper(mode) {
 	case "INIT":
 		log.Infof("Tager List:")
+		// Target load for configure
 		l :=  conf.TargetLoad()
 		for _, v := range l{
 			fmt.Println("-",v)
 		}
 
-		// Config Path
+		// Choice target cluster
 		initTarget, err := lib.GetOpt("Init Target(Single or All(Enter))")
 		if err != nil {
 			log.Warningf("%s",err)
@@ -71,7 +119,7 @@ func main() {
 			}
 		}
 		
-		// Main Init
+		// Initialize Clusters
 		var wg sync.WaitGroup
 		wg.Add(len(dbs))
 		for _, v := range dbs {
@@ -84,27 +132,34 @@ func main() {
 		var wg sync.WaitGroup
 		wg.Add(len(conf.Targets))
 
+		// Notification rouine for channel
 		go CompareFollowUp(Noti)
 
 		for _, t := range conf.Targets {
+			// schema compare routine
 			go CompareServer(&wg,t)
 		}
 
 		wg.Wait()
+	default:
+		log.Errorf("Invalid Mode. Please Check -h")
 	}
 }
 
+
 func CompareServer(wg *sync.WaitGroup,z lib.Target) {
+	// Main routine to run schema-specific routines
 	defer wg.Done()
 	for {
 		var swg sync.WaitGroup
 		swg.Add(len(z.DB))
 		for _, s := range z.DB {
+			// sub routines by schema
 			go CompareDB(&swg, z, s)
 		}
 
 		swg.Wait()
-		time.Sleep(10*time.Second)
+		time.Sleep(time.Duration(conf.Global.CompareIv)*time.Second)
 	}
 }
 
@@ -113,43 +168,49 @@ func CompareDB(swg *sync.WaitGroup,t lib.Target, s string) {
 
 	var liteObj,myObj lib.DBObject
 	var err error
+
+	// Source DB Connections(SQLite)
 	liteObj.Object, err = lib.OpenSQLite(conf.Global.DBPath,t.Alias,s)
 	if err != nil {
-		log.Errorf("OpenSQLite : %s",err)
+		log.Errorf("[CompareDB.OpenSQLite] %s",err)
 		return
 	}
+	defer liteObj.Object.Close()
 
+	// Target DB Connections (MySQL)
 	myObj.Object, err = lib.CreateDBObject(t,conf.Global.User,conf.Global.Pass)
 	if err != nil {
-		log.Errorf("CreateDBObject : %s",err)
+		log.Errorf("[CompareDB.CreateDBObject] %s",err)
 		return
 	}
 	defer myObj.Object.Close()
 
+	// Target db get definitions
 	aRawData, err := myObj.GetDefinitions(s)
 	if err != nil {
-		log.Errorf("GetDefinitions : %s",err)
+		log.Errorf("[CompareDB.GetDefinitions] %s",err)
 		return
 	}
 
+	// Source db get definitions(Save Data)
 	bRawData, err := liteObj.GetLiteDefinitions()
 	if err != nil {
-		log.Errorf("GetLiteDefinitions : %s",err)
+		log.Errorf("[CompareDB.GetLiteDefinitions] %s",err)
 		return
 	}
 
-	// Compare Table
+	// Compare Schema
 	Compares := lib.CompareTable(aRawData,bRawData)
 
-	// Compare Deploy
+	// Compare result deploy
 	err = liteObj.DeployCompare(Compares)
 	if err != nil {
-		log.Errorf("DeployCompare : %s",err)
+		log.Errorf("[CompareDB.DeployCompar] %s",err)
 		return
 	}
 
 	if len(Compares) > 0 {
-		// Send Notification Channel
+		// Send Compare result Channel
 		Noti <- lib.NotiChannel{
 			Schema: s,
 			Compares: Compares,
@@ -158,14 +219,14 @@ func CompareDB(swg *sync.WaitGroup,t lib.Target, s string) {
 		// History Write
 		err = liteObj.WriteHistory(Compares)
 		if err != nil {
-			log.Errorf("WriteHistory : %s",err)
+			log.Errorf("[CompareDB.WriteHistory] %s",err)
 			return
 		}
-		
 	}
 }
 
 func InitServer(wg *sync.WaitGroup,z lib.Target) error {
+	// Main routine to run schema-specific routines
 	defer wg.Done()
 	var swg sync.WaitGroup
 	swg.Add(len(z.DB))
@@ -173,6 +234,7 @@ func InitServer(wg *sync.WaitGroup,z lib.Target) error {
 	log.Infof("%s Initalize.",z.Alias)
 
 	for _, s := range z.DB {
+		// sub routines by schema
 		go InitDB(&swg, z, s)
 	}
 
@@ -188,13 +250,13 @@ func InitDB(swg *sync.WaitGroup,t lib.Target, s string) {
 	log.Infof("%s:%s Initialize Start",t.Alias, s)
 	liteObj.Object, err = lib.OpenSQLite(conf.Global.DBPath,t.Alias,s)
 	if err != nil {
-		log.Errorf("OpenSQLite : %s",err)
+		log.Errorf("[InitDB.OpenSQLite] %s",err)
 		return
 	}
 
 	myObj.Object, err = lib.CreateDBObject(t,conf.Global.User,conf.Global.Pass)
 	if err != nil {
-		log.Errorf("CreateDBObject : %s",err)
+		log.Errorf("[InitDB.CreateDBObject] %s",err)
 		return
 	}
 	defer myObj.Object.Close()
@@ -202,21 +264,21 @@ func InitDB(swg *sync.WaitGroup,t lib.Target, s string) {
 	// Init Storage Table
 	err = liteObj.InitSchema(s)
 	if err != nil {
-		log.Errorf("InitSchema : %s",err)
+		log.Errorf("[InitDB.InitSchema] %s",err)
 		return
 	}
 	
 	// Get Definition
 	rawData, err := myObj.GetDefinitions(s)
 	if err != nil {
-		log.Errorf("GetDefinitions : %s",err)
+		log.Errorf("[InitDB.GetDefinitions] %s",err)
 		return
 	}
 
 	// Write Definition
 	err = liteObj.WriteDefinitions(rawData)
 	if err != nil {
-		log.Errorf("WriteDefinitions : %s",err)
+		log.Errorf("[InitDB.WriteDefinitions] %s",err)
 		return
 	}
 
@@ -225,9 +287,10 @@ func InitDB(swg *sync.WaitGroup,t lib.Target, s string) {
 
 func CompareFollowUp(ch <-chan lib.NotiChannel) {
 	for i := range ch {
-		err := lib.TraceNotification(i,conf.Global.Webhook)
+		// Notification
+		err := lib.TraceNotification(appName, i, conf.Global.Webhook)
 		if err != nil {
-			log.Errorf("CompareFollowUp : %s",err)
+			log.Errorf("[CompareFollowUp.TraceNotification] %s",err)
 			return
 		}
 	}

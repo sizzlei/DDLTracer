@@ -10,7 +10,7 @@ type TableRaw struct{
 	TableDef 	string
 	Columns 	map[string]ColumnRawData
 	Comment 	string
-	Status		int64 // Status - 1:Add / 2:Modify / 9:Drop
+	Status		int64 // Status - 1:Add / 2:Modify / 9:Drop / 0:None
 }
 
 type ColumnRawData struct {
@@ -18,7 +18,7 @@ type ColumnRawData struct {
 	ColumnType 	string 
 	NullAllowed	string 
 	Comment 	string
-	Status		int64 // Status - 1:Add / 2:Modify / 9:Drop
+	Status		int64 // Status - 1:Add / 2:Modify / 9:Drop / 0:None
 }
 
 func CreateDBObject(t Target, u string, p string) (*sql.DB,error) {
@@ -29,10 +29,10 @@ func CreateDBObject(t Target, u string, p string) (*sql.DB,error) {
 		return nil,err
 	}
 
-	var result int
-	err = dbObj.QueryRow("select 1").Scan(&result)
+	// Connection Check
+	err = dbObj.Ping()
 	if err != nil {
-		return nil,err
+		return nil, err
 	}
 
 	return dbObj,nil
@@ -92,6 +92,7 @@ func (o DBObject) GetDefinitions(s string) (map[string]TableRaw, error) {
 			return Raws, err
 		}
 
+		// Get Columns
 		columnsData, err := o.Object.Query(getColumnQuery,s,table)
 		if err != nil {
 			return Raws, err
@@ -122,6 +123,7 @@ func (o DBObject) GetDefinitions(s string) (map[string]TableRaw, error) {
 			}
 		}
 
+		// Create definitions set
 		Raws[table] = TableRaw{
 			TableDef: definfo,
 			Columns: columnRaws,

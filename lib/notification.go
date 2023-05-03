@@ -11,7 +11,7 @@ type NotiChannel struct {
 	Compares 	map[string]TableRaw
 }
 
-func TraceNotification(n NotiChannel, url string) error {
+func TraceNotification(app string, n NotiChannel, url string) error {
 	data := `
 		{
 			"Color" : "#fd7e14",
@@ -20,7 +20,7 @@ func TraceNotification(n NotiChannel, url string) error {
 					"type": "section",
 					"text": {
 						"type": "mrkdwn",
-						"text": "Schema: *%s*"
+						"text": ":database: *%s*"
 					}
 				},
 				%s
@@ -30,14 +30,13 @@ func TraceNotification(n NotiChannel, url string) error {
 
 	var sections []string
 	for k, v := range n.Compares {
-		
 		if v.Status > 0 {
 			section := `
 				{
 					"type": "section",
 					"text": {
 						"type": "mrkdwn",
-						"text": "*Table:* %s *Action:* %s *Changed:* %s"
+						"text": "*Table:* %s \n*Action:* %s \n*Comment:* %s"
 					}
 				}
 			`
@@ -51,7 +50,7 @@ func TraceNotification(n NotiChannel, url string) error {
 				action = "DROPPED"
 			}
 
-			sections = append(sections,fmt.Sprintf(section,fmt.Sprintf("`%s`",k),fmt.Sprintf("`%s`",action),fmt.Sprintf("`%s`",v.TableDef)))
+			sections = append(sections,fmt.Sprintf(section,fmt.Sprintf("`%s`",k),fmt.Sprintf("`%s`",action),fmt.Sprintf("`%s`",v.Comment)))
 		}
 
 		if len(v.Columns) > 0 && v.Status != 9 {
@@ -65,7 +64,7 @@ func TraceNotification(n NotiChannel, url string) error {
 						}
 					}
 				`
-				sections = append(sections,fmt.Sprintf(tableSection,fmt.Sprintf("`%s`",k)))
+				sections = append(sections,fmt.Sprintf(tableSection,fmt.Sprintf("`%s (%s)`",k,v.Comment)))
 			}
 
 			section := `
@@ -101,7 +100,7 @@ func TraceNotification(n NotiChannel, url string) error {
 					nullString = "NOT NULL"
 				}
 
-				diffColumn = append(diffColumn,fmt.Sprintf(columnFormat,fmt.Sprintf("`%s` _%s_ `%s %s comment '%s'`",cAction, ck, cv.ColumnType, nullString, cv.Comment)))
+				diffColumn = append(diffColumn,fmt.Sprintf(columnFormat,fmt.Sprintf("`%s` _*%s*_ `%s %s comment '%s'`",cAction, ck, cv.ColumnType, nullString, cv.Comment)))
 				
 			}
 			diffMsg := strings.Join(diffColumn,"")
@@ -117,7 +116,7 @@ func TraceNotification(n NotiChannel, url string) error {
 		return err
 	}
 
-	err = slack.SendWebhookAttchment(url,"*DDL Tracer for MySQL by DBA*",att)
+	err = slack.SendWebhookAttchment(url,fmt.Sprintf("*%s*",app),att)
 	if err != nil {
 		return err
 	}
