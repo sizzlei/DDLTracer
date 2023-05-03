@@ -23,7 +23,7 @@ func main() {
 	// Flag Parsing
 	var mode,confPath,authDiv,paramKey,region string 
 	flag.StringVar(&mode,"mode","","DDLTracer Mode(INIT / START)")
-	flag.StringVar(&authDiv,"auth","FILE","DDLTracer authentication method(FILE / PARAM), Param is AWS Parameter Store.")
+	flag.StringVar(&authDiv,"auth","CONF","DDLTracer authentication method(CONF / PARAM), Param is AWS Parameter Store.")
 	flag.StringVar(&confPath,"conf","./conf.yml","DDLTracer Configure")
 	flag.StringVar(&region,"region","ap-northeast-2","DDLTracer authentication Parameter store Region")
 	flag.StringVar(&paramKey,"key","","DDLTracer authentication Parameter store key")
@@ -50,7 +50,7 @@ func main() {
 	}
 
 	switch strings.ToUpper(authDiv) {
-	case "FILE":
+	case "CONF":
 		if conf.Global.User == "" || conf.Global.Pass == "" {
 			log.Errorf("Invalid Global User and Global Password Please Check configure file.")	
 			os.Exit(1)
