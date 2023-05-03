@@ -7,6 +7,8 @@ DDL Tracer supports:
 
 > Changes to the index and additions and changes to the schema are not supported (to be added in the future).
 
+This is data that is not collected through the Binary Log, but is collected using the information in the Information Schema.
+
 In DDL Tracer, the main routine is executed for each server, and the subroutine is executed for each schema of the target server.
 ```
 DDL Tracer
@@ -121,3 +123,7 @@ CREATE TABLE definition_history (
 ```sql
 CREATE INDEX idx_tablename_columnname ON definition_history (table_name,column_name)
 ```
+
+## Notification
+When changes to tables and columns occur, notifications are raised via webhooks.
+> In the case of Rename Table and `ALTER TABLE ... CHANGE ...`, it is treated as DROP/ADD.
