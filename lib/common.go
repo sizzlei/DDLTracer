@@ -19,6 +19,7 @@ type GlobalConfigure struct {
 	Webhook		string 				`yaml:"WebhookUrl"`			// Notification Slack Channel
 	DBPath		string 				`yaml:"DBPath"`				// SQLite Save Path
 	CompareIv 	int64 				`yaml:"Compare_interval"`	// Compare routine exec interval(Seconds)
+	AddTableView bool				`yaml:"AddTable_Coloumn_view"` // View Column in Add Table Notification
 }
 
 type Target struct {

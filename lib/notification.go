@@ -11,7 +11,7 @@ type NotiChannel struct {
 	Compares 	map[string]TableRaw
 }
 
-func TraceNotification(app string, n NotiChannel, url string) error {
+func TraceNotification(app string, n NotiChannel, url string, colView bool) error {
 	data := `
 		{
 			"Color" : "#fd7e14",
@@ -36,7 +36,7 @@ func TraceNotification(app string, n NotiChannel, url string) error {
 					"type": "section",
 					"text": {
 						"type": "mrkdwn",
-						"text": "*Table:* %s \n*Action:* %s \n*Comment:* %s"
+						"text": "*Action:* %s \n*Table:* %s "
 					}
 				}
 			`
@@ -50,7 +50,7 @@ func TraceNotification(app string, n NotiChannel, url string) error {
 				action = "DROPPED"
 			}
 
-			sections = append(sections,fmt.Sprintf(section,fmt.Sprintf("`%s`",k),fmt.Sprintf("`%s`",action),fmt.Sprintf("`%s`",v.Comment)))
+			sections = append(sections,fmt.Sprintf(section,fmt.Sprintf("`%s`",action),fmt.Sprintf("`%s(%s)`",k,v.Comment)))
 		}
 
 		if len(v.Columns) > 0 && v.Status != 9 {
@@ -65,6 +65,10 @@ func TraceNotification(app string, n NotiChannel, url string) error {
 					}
 				`
 				sections = append(sections,fmt.Sprintf(tableSection,fmt.Sprintf("`%s (%s)`",k,v.Comment)))
+			}
+
+			if colView == false && v.Status == 1 {
+				continue
 			}
 
 			section := `

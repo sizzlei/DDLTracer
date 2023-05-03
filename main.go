@@ -84,9 +84,9 @@ func main() {
 	
 
 	// Configure Check
-	if conf.Global.CompareIv < 30 && strings.ToUpper(mode) == "START" {
-		log.Warningf("Compare interval is less than 30s.")
-		log.Warningf("Compare interval Set 30s")
+	if conf.Global.CompareIv < 60 && strings.ToUpper(mode) == "START" {
+		log.Warningf("Compare interval is less than 60s.")
+		log.Warningf("Compare interval Set 60s")
 		conf.Global.CompareIv = 30
 	}
 
@@ -287,8 +287,10 @@ func InitDB(swg *sync.WaitGroup,t lib.Target, s string) {
 
 func CompareFollowUp(ch <-chan lib.NotiChannel) {
 	for i := range ch {
+		now := time.Now().Format("2006-01-02 15:04:05")
+		fmt.Println(now, i)
 		// Notification
-		err := lib.TraceNotification(appName, i, conf.Global.Webhook)
+		err := lib.TraceNotification(appName, i, conf.Global.Webhook,conf.Global.AddTableView)
 		if err != nil {
 			log.Errorf("[CompareFollowUp.TraceNotification] %s",err)
 			return

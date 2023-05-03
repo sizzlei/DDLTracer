@@ -50,7 +50,8 @@ Global:
   Pass:
   WebhookUrl: [Webhook URL]
   DBPath: /sqlite
-  Compare_interval: 30
+  Compare_interval: 60
+  AddTable_Coloumn_view: true
 Targets:
   - Alias: test1
     Endpoint: test1.cluster-cgau50yc2g7n.ap-northeast-2.rds.amazonaws.com
@@ -67,7 +68,9 @@ This is a global setting that applies equally to all clusters.
 - WebhookUrl : Slack Webhook URL
 - DBPath : SQLite file path where table definition is saved
 - Compare_interval : Schema Compare Interval
-    - If it is set to 30 seconds or less, it is automatically set to 30 seconds.
+    - If it is set to 60 seconds or less, it is automatically set to 60 seconds.
+- AddTable_Coloumn_view : Determines whether to add column items to Notification when creating table.
+
 
 ### Target
 Set the target DB and schema according to the specifications below.
@@ -126,4 +129,4 @@ CREATE INDEX idx_tablename_columnname ON definition_history (table_name,column_n
 
 ## Notification
 When changes to tables and columns occur, notifications are raised via webhooks.
-> In the case of Rename Table and `ALTER TABLE ... CHANGE ...`, it is treated as DROP/ADD.
+> In the case of `Rename Table` and `ALTER TABLE ... CHANGE ...`, it is treated as DROP/ADD.
