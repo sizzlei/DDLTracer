@@ -36,19 +36,11 @@ func TraceNotification(app string, n NotiChannel, url string, colView bool) erro
 					"type": "section",
 					"text": {
 						"type": "mrkdwn",
-						"text": "*Action:* %s \n*Table:* %s "
+						"text": "*Action:* %s *Table:* %s "
 					}
 				}
 			`
-			var action string 
-			switch v.Status {
-			case 1:
-				action = "ADDED"
-			case 2: 
-				action = "MODIFIED"
-			case 9:
-				action = "DROPPED"
-			}
+			action := ConvertStatus(v.Status)
 
 			sections = append(sections,fmt.Sprintf(section,fmt.Sprintf("`%s`",action),fmt.Sprintf("`%s(%s)`",k,v.Comment)))
 		}
@@ -85,17 +77,7 @@ func TraceNotification(app string, n NotiChannel, url string, colView bool) erro
 			for ck, cv := range v.Columns {
 				columnFormat := `%s \n`
 				
-				var cAction string 
-				switch cv.Status {
-				case 1:
-					cAction = "ADD"
-				case 2: 
-					cAction = "MODIFY"
-				case 9:
-					cAction = "DROP"
-				case 0:
-					cAction = "NONE"
-				}
+				cAction := ConvertStatus(cv.Status)
 
 				var nullString string
 				if cv.NullAllowed == "YES" {
@@ -127,4 +109,19 @@ func TraceNotification(app string, n NotiChannel, url string, colView bool) erro
 
 	return nil
 
+}
+
+func ConvertStatus(status string) string {
+	switch status {
+	case 1:
+		return "ADD"
+	case 2: 
+		return "MODIFY"
+	case 9:
+		return "DROP"
+	case 0:
+		return "NONE"
+	}
+
+	return "invalid_status"
 }

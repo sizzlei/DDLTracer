@@ -205,7 +205,7 @@ func CompareDB(swg *sync.WaitGroup,t lib.Target, s string) {
 	// Compare result deploy
 	err = liteObj.DeployCompare(Compares)
 	if err != nil {
-		log.Errorf("[CompareDB.DeployCompar] %s",err)
+		log.Errorf("[CompareDB.DeployCompare] %s",err)
 		return
 	}
 
