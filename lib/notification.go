@@ -7,6 +7,7 @@ import (
 )
 
 type NotiChannel struct {
+	Alias 		string
 	Schema 		string 
 	Compares 	map[string]TableRaw
 }
@@ -20,7 +21,7 @@ func TraceNotification(app string, n NotiChannel, url string, colView bool) erro
 					"type": "section",
 					"text": {
 						"type": "mrkdwn",
-						"text": ":database: *%s*"
+						"text": ":desktop_computer: *%s* \n:database: *%s*"
 					}
 				},
 				%s
@@ -37,7 +38,7 @@ func TraceNotification(app string, n NotiChannel, url string, colView bool) erro
 					"type": "section",
 					"text": {
 						"type": "mrkdwn",
-						"text": "*Action:* %s *Table:* %s "
+						"text": "%s *Table:* %s "
 					}
 				}
 			`
@@ -97,7 +98,7 @@ func TraceNotification(app string, n NotiChannel, url string, colView bool) erro
 		}
 	}
 	sectionsStr := strings.Join(sections,",")
-	sendMsg := fmt.Sprintf(baseTemplate,n.Schema,sectionsStr)
+	sendMsg := fmt.Sprintf(baseTemplate,n.Alias,n.Schema,sectionsStr)
 
 	// Create Slack Attachment
 	att, err := slack.CreateAttachement(sendMsg)
@@ -106,7 +107,7 @@ func TraceNotification(app string, n NotiChannel, url string, colView bool) erro
 	}
 
 	// Send Notification
-	err = slack.SendWebhookAttchment(url,fmt.Sprintf("*%s*",app),att)
+	err = slack.SendWebhookAttchment(url,fmt.Sprintf("*%s* \nChange detection *%s*",app,n.Alias),att)
 	if err != nil {
 		return err
 	}

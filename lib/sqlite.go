@@ -16,7 +16,7 @@ func OpenSQLite(p string,a string, s string) (*sql.DB, error) {
 	return sqlObj,nil
 }
 
-func (o DBObject) InitSchema(s string) error {
+func (o DBObject) InitSchema(s string,c bool) error {
 	DropColumnsQuery := `DROP TABLE IF EXISTS column_definitions;`
 	DropTableQuery := `DROP TABLE IF EXISTS table_definitions;`
 	DropHistoryQuery := `DROP TABLE IF EXISTS definition_history;`
@@ -67,11 +67,6 @@ func (o DBObject) InitSchema(s string) error {
 		return err
 	}
 
-	_, err = o.Object.Exec(DropHistoryQuery)
-	if err != nil {
-		return err
-	}
-
 	// Create
 	_, err = o.Object.Exec(CreateColumnsQuery)
 	if err != nil {
@@ -83,15 +78,24 @@ func (o DBObject) InitSchema(s string) error {
 		return err
 	}
 
-	_, err = o.Object.Exec(CreateHistoryQuery)
-	if err != nil {
-		return err
-	}
+	// History Cleaner
+	if c == true {
+		_, err = o.Object.Exec(DropHistoryQuery)
+		if err != nil {
+			return err
+		}
 
-	_, err = o.Object.Exec(CreateHistoryIndex)
-	if err != nil {
-		return err
+		_, err = o.Object.Exec(CreateHistoryQuery)
+		if err != nil {
+			return err
+		}
+
+		_, err = o.Object.Exec(CreateHistoryIndex)
+		if err != nil {
+			return err
+		}
 	}
+	
 
 	return nil
 }

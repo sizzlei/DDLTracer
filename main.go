@@ -18,7 +18,7 @@ const (
 
 var conf lib.DDLTracerConfigure
 var Noti = make(chan lib.NotiChannel)
-
+var histClean bool
 func main() {
 	// Flag Parsing
 	var mode,confPath,authDiv,paramKey,region string 
@@ -27,6 +27,7 @@ func main() {
 	flag.StringVar(&confPath,"conf","./conf.yml","DDLTracer Configure")
 	flag.StringVar(&region,"region","ap-northeast-2","DDLTracer authentication Parameter store Region")
 	flag.StringVar(&paramKey,"key","","DDLTracer authentication Parameter store key")
+	flag.BoolVar(&histClean,"history-clean",false,"Definition History Clean")
 	flag.Parse()
 
 	log.Infof("%s",appName)
@@ -212,6 +213,7 @@ func CompareDB(swg *sync.WaitGroup,t lib.Target, s string) {
 	if len(Compares) > 0 {
 		// Send Compare result Channel
 		Noti <- lib.NotiChannel{
+			Alias: t.Alias,
 			Schema: s,
 			Compares: Compares,
 		}
@@ -262,7 +264,7 @@ func InitDB(swg *sync.WaitGroup,t lib.Target, s string) {
 	defer myObj.Object.Close()
 
 	// Init Storage Table
-	err = liteObj.InitSchema(s)
+	err = liteObj.InitSchema(s,histClean)
 	if err != nil {
 		log.Errorf("[InitDB.InitSchema] %s",err)
 		return
@@ -288,7 +290,7 @@ func InitDB(swg *sync.WaitGroup,t lib.Target, s string) {
 func CompareFollowUp(ch <-chan lib.NotiChannel) {
 	for i := range ch {
 		now := time.Now().Format("2006-01-02 15:04:05")
-		fmt.Println(now, i.Schema, i.Compares)
+		fmt.Println(now, i.Alias, i.Schema, i.Compares)
 		// Notification
 		err := lib.TraceNotification(appName, i, conf.Global.Webhook,conf.Global.AddTableView)
 		if err != nil {

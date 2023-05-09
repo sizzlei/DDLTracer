@@ -31,6 +31,7 @@ If the authentication method is set to PARAM, account information is loaded from
 - conf : Configure File Path
 - region : Region where the Parameter Store Key set in the KEY Flag exists
 - key : AWS Parameter Store Key
+- history-clean : Initialize the change history.
 
 ### Example
 ```shell
