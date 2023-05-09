@@ -288,7 +288,7 @@ func InitDB(swg *sync.WaitGroup,t lib.Target, s string) {
 func CompareFollowUp(ch <-chan lib.NotiChannel) {
 	for i := range ch {
 		now := time.Now().Format("2006-01-02 15:04:05")
-		fmt.Println(now, i)
+		fmt.Println(now, i.Schema, i.Compares)
 		// Notification
 		err := lib.TraceNotification(appName, i, conf.Global.Webhook,conf.Global.AddTableView)
 		if err != nil {

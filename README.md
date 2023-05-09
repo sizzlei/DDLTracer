@@ -111,7 +111,7 @@ CREATE TABLE table_definitions (
     PRIMARY KEY (table_name)
 );
 ```
-#### definition_hisotry
+#### definition_history
 ```sql
 CREATE TABLE definition_history (
     table_name text not null,

@@ -12,7 +12,7 @@ type NotiChannel struct {
 }
 
 func TraceNotification(app string, n NotiChannel, url string, colView bool) error {
-	data := `
+	baseTemplate := `
 		{
 			"Color" : "#fd7e14",
 			"blocks": [
@@ -30,6 +30,7 @@ func TraceNotification(app string, n NotiChannel, url string, colView bool) erro
 
 	var sections []string
 	for k, v := range n.Compares {
+		// Tables
 		if v.Status > 0 {
 			section := `
 				{
@@ -45,6 +46,7 @@ func TraceNotification(app string, n NotiChannel, url string, colView bool) erro
 			sections = append(sections,fmt.Sprintf(section,fmt.Sprintf("`%s`",action),fmt.Sprintf("`%s(%s)`",k,v.Comment)))
 		}
 
+		// Columns
 		if len(v.Columns) > 0 && v.Status != 9 {
 			if v.Status == 0 {
 				tableSection := `
@@ -95,13 +97,15 @@ func TraceNotification(app string, n NotiChannel, url string, colView bool) erro
 		}
 	}
 	sectionsStr := strings.Join(sections,",")
-	sendMsg := fmt.Sprintf(data,n.Schema,sectionsStr)
+	sendMsg := fmt.Sprintf(baseTemplate,n.Schema,sectionsStr)
 
+	// Create Slack Attachment
 	att, err := slack.CreateAttachement(sendMsg)
 	if err != nil {
 		return err
 	}
 
+	// Send Notification
 	err = slack.SendWebhookAttchment(url,fmt.Sprintf("*%s*",app),att)
 	if err != nil {
 		return err
@@ -111,7 +115,7 @@ func TraceNotification(app string, n NotiChannel, url string, colView bool) erro
 
 }
 
-func ConvertStatus(status string) string {
+func ConvertStatus(status int64) string {
 	switch status {
 	case 1:
 		return "ADD"
