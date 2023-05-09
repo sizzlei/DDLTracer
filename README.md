@@ -19,6 +19,20 @@ DDL Tracer
     |== Schema1
     |== Schema2
 ```
+## Usage
+### INIT
+After configuring, initialize and save the target DB Definition.
+`ddltracer.run -auth=param -conf=./conf.yml -region=ap-northeast-2 -key=[Parameter Store Key] -mode=INIT`
+
+### Start
+Start your comparison logic.
+`ddltracer.run -auth=param -conf=./conf.yml -region=ap-northeast-2 -key=[Parameter Store Key] -mode=START`
+
+## Using Clean History
+Execute as below to remove the existing history and initialize it.
+`ddltracer.run -auth=param -conf=./conf.yml -region=ap-northeast-2 -key=[Parameter Store Key] -history-clean -mode=INIT`
+Purge history is disabled by default.
+
 ## Flag
 DDL tracer should be run with the flag value below.
 - mode
