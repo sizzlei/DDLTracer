@@ -24,7 +24,7 @@ func main() {
 	var mode,confPath,authDiv,paramKey,region string 
 	flag.StringVar(&mode,"mode","","DDLTracer Mode(INIT / START)")
 	flag.StringVar(&authDiv,"auth","CONF","DDLTracer authentication method(CONF / PARAM), Param is AWS Parameter Store.")
-	flag.StringVar(&confPath,"conf","./conf.yml","DDLTracer Configure")
+	flag.StringVar(&confPath,"conf","./config.yml","DDLTracer Configure")
 	flag.StringVar(&region,"region","ap-northeast-2","DDLTracer authentication Parameter store Region")
 	flag.StringVar(&paramKey,"key","","DDLTracer authentication Parameter store key")
 	flag.BoolVar(&histClean,"history-clean",false,"Definition History Clean")
@@ -233,8 +233,6 @@ func InitServer(wg *sync.WaitGroup,z lib.Target) error {
 	var swg sync.WaitGroup
 	swg.Add(len(z.DB))
 
-	log.Infof("%s Initalize.",z.Alias)
-
 	for _, s := range z.DB {
 		// sub routines by schema
 		go InitDB(&swg, z, s)
@@ -252,13 +250,13 @@ func InitDB(swg *sync.WaitGroup,t lib.Target, s string) {
 	log.Infof("%s:%s Initialize Start",t.Alias, s)
 	liteObj.Object, err = lib.OpenSQLite(conf.Global.DBPath,t.Alias,s)
 	if err != nil {
-		log.Errorf("[InitDB.OpenSQLite] %s",err)
+		log.Errorf("[InitDB.OpenSQLite] %s %s",t.Alias,err)
 		return
 	}
 
 	myObj.Object, err = lib.CreateDBObject(t,conf.Global.User,conf.Global.Pass)
 	if err != nil {
-		log.Errorf("[InitDB.CreateDBObject] %s",err)
+		log.Errorf("[InitDB.CreateDBObject] %s %s",t.Alias,err)
 		return
 	}
 	defer myObj.Object.Close()
@@ -266,21 +264,21 @@ func InitDB(swg *sync.WaitGroup,t lib.Target, s string) {
 	// Init Storage Table
 	err = liteObj.InitSchema(s,histClean)
 	if err != nil {
-		log.Errorf("[InitDB.InitSchema] %s",err)
+		log.Errorf("[InitDB.InitSchema] %s %s",t.Alias,err)
 		return
 	}
 	
 	// Get Definition
 	rawData, err := myObj.GetDefinitions(s)
 	if err != nil {
-		log.Errorf("[InitDB.GetDefinitions] %s",err)
+		log.Errorf("[InitDB.GetDefinitions] %s %s",t.Alias,err)
 		return
 	}
 
 	// Write Definition
 	err = liteObj.WriteDefinitions(rawData)
 	if err != nil {
-		log.Errorf("[InitDB.WriteDefinitions] %s",err)
+		log.Errorf("[InitDB.WriteDefinitions] %s %s",t.Alias,err)
 		return
 	}
 
