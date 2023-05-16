@@ -66,7 +66,7 @@ Global:
   WebhookUrl: [Webhook URL]
   DBPath: /sqlite
   Compare_interval: 60
-  AddTable_Coloumn_view: true
+  AddTable_Column_view: true
 Targets:
   - Alias: test1
     Endpoint: test1.cluster-cgau50yc2g7n.ap-northeast-2.rds.amazonaws.com
@@ -84,7 +84,7 @@ This is a global setting that applies equally to all clusters.
 - DBPath : SQLite file path where table definition is saved
 - Compare_interval : Schema Compare Interval
     - If it is set to 60 seconds or less, it is automatically set to 60 seconds.
-- AddTable_Coloumn_view : Determines whether to add column items to Notification when creating table.
+- AddTable_Column_view : Determines whether to add column items to Notification when creating table.
 
 
 ### Target
