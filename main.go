@@ -171,7 +171,7 @@ func CompareDB(swg *sync.WaitGroup,t lib.Target, s string) {
 	var err error
 
 	// Source DB Connections(SQLite)
-	liteObj.Object, err = lib.OpenSQLite(conf.Global.DBPath,t.Alias,s)
+	liteObj.Object, _, err = lib.OpenSQLite(conf.Global.DBPath,t.Alias,s)
 	if err != nil {
 		log.Errorf("[CompareDB.OpenSQLite] %s",err)
 		return
@@ -247,8 +247,9 @@ func InitDB(swg *sync.WaitGroup,t lib.Target, s string) {
 	defer swg.Done()
 	var liteObj,myObj lib.DBObject
 	var err error
+	var fileExists bool
 	log.Infof("%s:%s Initialize Start",t.Alias, s)
-	liteObj.Object, err = lib.OpenSQLite(conf.Global.DBPath,t.Alias,s)
+	liteObj.Object, fileExists, err = lib.OpenSQLite(conf.Global.DBPath,t.Alias,s)
 	if err != nil {
 		log.Errorf("[InitDB.OpenSQLite] %s %s",t.Alias,err)
 		return
@@ -260,6 +261,12 @@ func InitDB(swg *sync.WaitGroup,t lib.Target, s string) {
 		return
 	}
 	defer myObj.Object.Close()
+
+	// History Table Check
+	if fileExists == false && histClean == false {
+		// First Init 
+		histClean = true
+	}
 
 	// Init Storage Table
 	err = liteObj.InitSchema(s,histClean)

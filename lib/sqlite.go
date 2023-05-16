@@ -5,15 +5,31 @@ import (
 	_ "modernc.org/sqlite"
 	"fmt"
 	"time"
+	"os"
 )
 
-func OpenSQLite(p string,a string, s string) (*sql.DB, error) {
-	sqlObj, err := sql.Open("sqlite",fmt.Sprintf("%s/%s_%s.db",p, s, a))
+func OpenSQLite(p string,a string, s string) (*sql.DB, bool, error) {
+	fileExists := true
+	// File Name
+	dbFile := fmt.Sprintf("%s/%s_%s.db",p, s, a)
+
+	// File Check
+	_, err := os.Stat(dbFile)
+	if os.IsNotExist(err) {
+		// Not file
+		fileExists = false
+	} else {
+		// File Ok
+		fileExists = true
+	}
+
+	// SQLIite File Open
+	sqlObj, err := sql.Open("sqlite",dbFile)
 	if err != nil {
-		return nil, err
+		return nil, fileExists, err
 	}
 	
-	return sqlObj,nil
+	return sqlObj,fileExists,nil
 }
 
 func (o DBObject) InitSchema(s string,c bool) error {
