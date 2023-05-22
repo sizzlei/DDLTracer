@@ -173,7 +173,7 @@ func CompareDB(swg *sync.WaitGroup,t lib.Target, s string) {
 	// Source DB Connections(SQLite)
 	liteObj.Object, _, err = lib.OpenSQLite(conf.Global.DBPath,t.Alias,s)
 	if err != nil {
-		log.Errorf("[CompareDB.OpenSQLite] %s",err)
+		log.Errorf("[CompareDB.OpenSQLite] %s %s",t.Alias,err)
 		return
 	}
 	defer liteObj.Object.Close()
@@ -181,7 +181,7 @@ func CompareDB(swg *sync.WaitGroup,t lib.Target, s string) {
 	// Target DB Connections (MySQL)
 	myObj.Object, err = lib.CreateDBObject(t,conf.Global.User,conf.Global.Pass)
 	if err != nil {
-		log.Errorf("[CompareDB.CreateDBObject] %s",err)
+		log.Errorf("[CompareDB.CreateDBObject] %s %s",t.Alias,err)
 		return
 	}
 	defer myObj.Object.Close()
@@ -189,14 +189,14 @@ func CompareDB(swg *sync.WaitGroup,t lib.Target, s string) {
 	// Target db get definitions
 	aRawData, err := myObj.GetDefinitions(s)
 	if err != nil {
-		log.Errorf("[CompareDB.GetDefinitions] %s",err)
+		log.Errorf("[CompareDB.GetDefinitions] %s %s",t.Alias,err)
 		return
 	}
 
 	// Source db get definitions(Save Data)
 	bRawData, err := liteObj.GetLiteDefinitions()
 	if err != nil {
-		log.Errorf("[CompareDB.GetLiteDefinitions] %s",err)
+		log.Errorf("[CompareDB.GetLiteDefinitions] %s %s",t.Alias,err)
 		return
 	}
 
@@ -206,7 +206,7 @@ func CompareDB(swg *sync.WaitGroup,t lib.Target, s string) {
 	// Compare result deploy
 	err = liteObj.DeployCompare(Compares)
 	if err != nil {
-		log.Errorf("[CompareDB.DeployCompare] %s",err)
+		log.Errorf("[CompareDB.DeployCompare] %s %s",t.Alias,err)
 		return
 	}
 
@@ -221,7 +221,7 @@ func CompareDB(swg *sync.WaitGroup,t lib.Target, s string) {
 		// History Write
 		err = liteObj.WriteHistory(Compares)
 		if err != nil {
-			log.Errorf("[CompareDB.WriteHistory] %s",err)
+			log.Errorf("[CompareDB.WriteHistory] %s %s",t.Alias,err)
 			return
 		}
 	}
