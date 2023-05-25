@@ -73,6 +73,16 @@ Targets:
     Port: 3306
     DB: ["test_db1","test_db2"]
 ```
+
+### auth=PARAM Sample Configure
+```yml
+Param:
+  - ConfigId : DDLTracer
+    Conf :
+      User: 
+      Pass: 
+```
+
 ### Global
 This is a global setting that applies equally to all clusters.
 - User : DB Connection User
